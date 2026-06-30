@@ -1,0 +1,8 @@
+/out/
+/dist/
+/data/
+/*.jar
+.idea/
+*.class
+*.log
+*.ser
