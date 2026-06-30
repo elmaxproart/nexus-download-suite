@@ -9,6 +9,7 @@ import java.net.URL;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
+import java.net.URISyntaxException;  // <-- AJOUTE CETTE LIGNE
 
 /**
  * Représente une tâche de téléchargement RÉEL unique.
@@ -56,6 +57,15 @@ public class TacheTelechargement implements Runnable, Serializable, ITask {
         this.listener = listener;
     }
 
+    /**
+     * Vérifie si le fichier téléchargé est un fichier valide (non corrompu).
+     * Cette méthode vérifie simplement si le fichier existe et a une taille > 0.
+     */
+    public boolean verifierFichierValide() {
+        File fichier = new File(cheminDestination, nomFichier);
+        return fichier.exists() && fichier.length() > 0;
+    }
+
     public void setGestionnaire(GestionnaireTaches gestionnaire) {
         this.gestionnaire = gestionnaire;
     }
@@ -72,7 +82,14 @@ public class TacheTelechargement implements Runnable, Serializable, ITask {
 
         try {
             // 1. Handshake pour tester la taille et le support des en-têtes Range
-            URL urlObj = new URI(urlSource).toURL();
+            //URL urlObj = new URI(urlSource).toURL();
+
+            URL urlObj;
+            try {
+                urlObj = new URI(urlSource).toURL();
+            } catch (URISyntaxException e) {
+                throw new IOException("URL invalide : " + urlSource, e);
+            }
             HttpURLConnection testConn = (HttpURLConnection) urlObj.openConnection();
             testConn.setRequestMethod("GET");
             testConn.setRequestProperty("Range", "bytes=0-1");
@@ -168,18 +185,34 @@ public class TacheTelechargement implements Runnable, Serializable, ITask {
             }
             notifierTerminee();
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             this.statut = StatutTache.ERREUR;
             this.dateFin = LocalDateTime.now();
+            
+            // Message d'erreur plus explicite
+            String erreurMsg;
+            if (e.getMessage().contains("HTTP") && e.getMessage().contains("404")) {
+                erreurMsg = "Fichier non trouvé (404) : vérifiez l'URL";
+            } else if (e.getMessage().contains("HTTP") && e.getMessage().contains("403")) {
+                erreurMsg = "Accès refusé (403) : fichier protégé";
+            } else if (e.getMessage().contains("HTTP") && e.getMessage().contains("500")) {
+                erreurMsg = "Erreur serveur (500) : réessayez plus tard";
+            } else {
+                erreurMsg = "Erreur de téléchargement : " + e.getMessage();
+            }
+            
             this.vitesseMoS = 0.0;
             this.etaSecondes = -1;
-            notifierTerminee();
             
-            // Nettoyer fichier partiel
+            // Nettoyer le fichier partiel
             File fichierPartiel = new File(cheminDestination, nomFichier);
             if (fichierPartiel.exists()) {
                 fichierPartiel.delete();
             }
+            
+            notifierTerminee();
+            // Log l'erreur
+            System.err.println("[ERREUR] " + erreurMsg);
         }
     }
 
@@ -216,18 +249,22 @@ public class TacheTelechargement implements Runnable, Serializable, ITask {
         }
     }
 
-    private void telechargerMonoThread(long tailleFichier) throws IOException, Exception {
-        URL urlObj = new URI(urlSource).toURL();
-        HttpURLConnection conn = (HttpURLConnection) urlObj.openConnection();
-        conn.setRequestMethod("GET");
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(30000);
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0");
-
-        File destFile = new File(cheminDestination, nomFichier);
+    private void telechargerMonoThread(long tailleFichier) throws IOException {
+        HttpURLConnection conn = null;
+        InputStream is = null;
+        FileOutputStream fos = null;
         
-        try (InputStream is = conn.getInputStream();
-             FileOutputStream fos = new FileOutputStream(destFile)) {
+        try {
+            URL urlObj = new URI(urlSource).toURL();
+            conn = (HttpURLConnection) urlObj.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(30000);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+
+            File destFile = new File(cheminDestination, nomFichier);
+            is = conn.getInputStream();
+            fos = new FileOutputStream(destFile);
 
             byte[] buffer = new byte[TAILLE_BLOC];
             int read;
@@ -242,7 +279,6 @@ public class TacheTelechargement implements Runnable, Serializable, ITask {
             while ((read = is.read(buffer)) != -1) {
                 if (annulee) {
                     changerStatutAnnule();
-                    conn.disconnect();
                     return;
                 }
 
@@ -267,7 +303,12 @@ public class TacheTelechargement implements Runnable, Serializable, ITask {
                             long expectedTime = (long) (bytesInLimiterInterval * 1000.0 / limitPerTask);
                             long delay = expectedTime - elapsed;
                             if (delay > 0) {
-                                Thread.sleep(delay);
+                                try {
+                                    Thread.sleep(delay);
+                                } catch (InterruptedException ie) {
+                                    Thread.currentThread().interrupt();
+                                    return;
+                                }
                             }
                         }
                     }
@@ -300,8 +341,20 @@ public class TacheTelechargement implements Runnable, Serializable, ITask {
                     lastNotification = now;
                 }
             }
+            
+        } catch (IOException e) {
+            throw e;
+        } catch (URISyntaxException e) {
+            throw new IOException("URL invalide : " + urlSource, e);
         } finally {
-            conn.disconnect();
+            // Fermeture propre des ressources
+            try {
+                if (fos != null) fos.close();
+            } catch (IOException ignored) {}
+            try {
+                if (is != null) is.close();
+            } catch (IOException ignored) {}
+            if (conn != null) conn.disconnect();
         }
     }
 
@@ -454,6 +507,9 @@ public class TacheTelechargement implements Runnable, Serializable, ITask {
                         lastNotification = now;
                     }
                 }
+
+                // SUPPRIME LE BLOC DE CODE CI-DESSUS QUI CAUSE L'ERREUR
+                // Le bloc qui utilise "tailleFichier" a été déplacé dans la méthode run() principale
 
             } catch (Exception e) {
                 echec = true;

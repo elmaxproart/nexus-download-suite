@@ -41,6 +41,26 @@ public class FuturisticProgressBar extends JProgressBar {
         }
     }
 
+    public void setProgressWithSize(long bytesRecus, long tailleTotal) {
+        if (tailleTotal > 0) {
+            int percent = (int) ((bytesRecus * 100) / tailleTotal);
+            setValue(Math.min(100, percent));
+            
+            String tailleStr;
+            if (tailleTotal < 1024 * 1024) {
+                tailleStr = bytesRecus / 1024 + " Ko / " + tailleTotal / 1024 + " Ko";
+            } else {
+                tailleStr = String.format("%.1f Mo / %.1f Mo", 
+                        bytesRecus / (1024.0 * 1024.0), 
+                        tailleTotal / (1024.0 * 1024.0));
+            }
+            setString(percent + "% - " + tailleStr);
+        } else {
+            setIndeterminate(true);
+            setString("Connexion...");
+        }
+    }
+
     @Override
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();

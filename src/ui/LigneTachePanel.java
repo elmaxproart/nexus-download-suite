@@ -187,7 +187,7 @@ public class LigneTachePanel extends JPanel {
     /**
      * Formate les métriques détaillées (vitesse, ETA, volume).
      */
-    private String formaterMetriques(TacheTelechargement t) {
+    /*private String formaterMetriques(TacheTelechargement t) {
         StatutTache statut = t.getStatut();
         if (statut == StatutTache.EN_COURS) {
             double vitesse = t.getVitesseMoS();
@@ -207,6 +207,47 @@ public class LigneTachePanel extends JPanel {
             return "Échec • Récupéré: " + formaterTailleMo(t.getOctetsRecus() / (1024.0 * 1024.0)) + " / " + formaterTailleMo(t.getTailleTotaleMo());
         } else {
             return "Annulé • Récupéré: " + formaterTailleMo(t.getOctetsRecus() / (1024.0 * 1024.0)) + " / " + formaterTailleMo(t.getTailleTotaleMo());
+        }
+    }*/
+
+    private String formaterMetriques(TacheTelechargement t) {
+        StatutTache statut = t.getStatut();
+        double tailleMo = t.getTailleTotaleMo();
+        double progression = t.getProgression();
+        
+        String tailleStr;
+        if (tailleMo < 0) {
+            tailleStr = "???";
+        } else if (tailleMo < 0.001) {
+            tailleStr = "Fichier vide";
+        } else if (tailleMo < 1) {
+            long tailleKo = Math.round(tailleMo * 1024);
+            tailleStr = tailleKo + " Ko";
+        } else {
+            tailleStr = String.format("%.1f Mo", tailleMo);
+        }
+        
+        String progressStr;
+        if (progression < 0) {
+            progressStr = "Calcul...";
+        } else {
+            progressStr = String.format("%.1f%%", progression);
+        }
+        
+        if (statut == StatutTache.EN_COURS) {
+            double vitesse = t.getVitesseMoS();
+            long eta = t.getEtaSecondes();
+            String vitesseStr = vitesse < 0.1 ? String.format("%.0f Ko/s", vitesse * 1024) : String.format("%.1f Mo/s", vitesse);
+            String etaStr = eta < 0 ? "calcul..." : (eta >= 60 ? (eta / 60) + "m " + (eta % 60) + "s" : eta + "s");
+            return progressStr + " • " + tailleStr + " • " + vitesseStr + " • Restant: " + etaStr;
+        } else if (statut == StatutTache.EN_ATTENTE) {
+            return "En attente • " + tailleStr;
+        } else if (statut == StatutTache.TERMINE) {
+            return "✓ Terminé • " + tailleStr;
+        } else if (statut == StatutTache.ERREUR) {
+            return "✗ Échec • " + tailleStr;
+        } else {
+            return "⊘ Annulé • " + tailleStr;
         }
     }
 

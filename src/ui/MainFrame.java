@@ -12,6 +12,7 @@ import ui.tabs.ConsoleTab;
 import ui.tabs.LibraryTab;
 import ui.tabs.SettingsTab;
 import ui.tabs.DocTab;
+import java.io.IOException;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -218,7 +219,7 @@ public class MainFrame extends JFrame implements ProgressionListener {
         return champUrl;
     }
 
-    private void lancerTelechargementRapide(JTextField champUrl) {
+    /*private void lancerTelechargementRapide(JTextField champUrl) {
         String urlStr = champUrl.getText().trim();
         if (!urlStr.isEmpty()) {
             try {
@@ -235,6 +236,53 @@ public class MainFrame extends JFrame implements ProgressionListener {
             JOptionPane.showMessageDialog(this,
                     "L'URL ne peut pas être vide.",
                     "Erreur de saisie", JOptionPane.WARNING_MESSAGE);
+        }
+    }*/
+
+    private void lancerTelechargementRapide(JTextField champUrl) {
+        String urlStr = champUrl.getText().trim();
+        if (urlStr.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "Veuillez entrer une URL valide.",
+                    "Erreur de saisie", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        // Vérifier que l'URL commence par http:// ou https://
+        if (!urlStr.startsWith("http://") && !urlStr.startsWith("https://")) {
+            urlStr = "https://" + urlStr;
+        }
+        
+        try {
+            // Valider l'URL
+            java.net.URL url = new java.net.URL(urlStr);
+            
+            // Extraire le nom du fichier
+            String nomFichier = extraireNomFichier(urlStr);
+            
+            // Ajouter et lancer la tâche
+            ajouterEtLancerTache(nomFichier, urlStr);
+            champUrl.setText("");
+            
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                    "L'URL saisie est invalide.\n" +
+                    "Assurez-vous qu'elle commence par http:// ou https://\n" +
+                    "Exemple: https://example.com/fichier.zip",
+                    "Erreur de saisie", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void ouvrirFichier(TacheTelechargement tache) {
+        File fichier = new File(dossierTelechargement, tache.getNomFichier());
+        if (fichier.exists()) {
+            try {
+                Desktop.getDesktop().open(fichier);
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(this,
+                        "Impossible d'ouvrir le fichier : " + e.getMessage(),
+                        "Erreur", JOptionPane.ERROR_MESSAGE);
+            }
         }
     }
 
@@ -398,7 +446,7 @@ public class MainFrame extends JFrame implements ProgressionListener {
         timerAnimation.start();
     }
 
-    private String extraireNomFichier(String url) {
+    /*private String extraireNomFichier(String url) {
         try {
             String path = url.split("\\?")[0];
             String[] segments = path.split("/");
@@ -408,6 +456,33 @@ public class MainFrame extends JFrame implements ProgressionListener {
                 return "telechargement_" + System.currentTimeMillis();
             }
             
+            return java.net.URLDecoder.decode(dernierSegment, "UTF-8");
+        } catch (Exception e) {
+            return "telechargement_" + System.currentTimeMillis();
+        }
+    }*/
+
+    private String extraireNomFichier(String url) {
+        try {
+            // Nettoyer l'URL des paramètres
+            String cleanUrl = url.split("\\?")[0];
+            String[] segments = cleanUrl.split("/");
+            String dernierSegment = segments[segments.length - 1];
+            
+            // Si le dernier segment est vide ou n'a pas d'extension
+            if (dernierSegment == null || dernierSegment.isEmpty() || !dernierSegment.contains(".")) {
+                // Générer un nom basé sur le domaine + timestamp
+                try {
+                    java.net.URL urlObj = new java.net.URL(url);
+                    String host = urlObj.getHost();
+                    String nomBase = host.replaceAll("^www\\.", "").replaceAll("\\..*$", "");
+                    return nomBase + "_" + System.currentTimeMillis() + ".file";
+                } catch (Exception e) {
+                    return "telechargement_" + System.currentTimeMillis() + ".file";
+                }
+            }
+            
+            // Décoder les caractères encodés (ex: %20 -> espace)
             return java.net.URLDecoder.decode(dernierSegment, "UTF-8");
         } catch (Exception e) {
             return "telechargement_" + System.currentTimeMillis();
@@ -645,6 +720,13 @@ public class MainFrame extends JFrame implements ProgressionListener {
                 JOptionPane.showMessageDialog(this,
                         "Téléchargement terminé !\nFichier sauvegardé dans : " + dossierTelechargement,
                         "Succès", JOptionPane.INFORMATION_MESSAGE);
+            }
+            int choix = JOptionPane.showConfirmDialog(this,
+            "Téléchargement terminé !\nFichier sauvegardé dans : " + dossierTelechargement +
+            "\n\nVoulez-vous ouvrir le fichier ?",
+            "Succès", JOptionPane.YES_NO_OPTION);
+            if (choix == JOptionPane.YES_OPTION) {
+                ouvrirFichier(tache);
             }
         });
     }

@@ -69,13 +69,16 @@ public class GestionnairePersistance implements IPersistance {
      */
     public boolean exporterCsv(List<TacheTelechargement> taches, String cheminRapport) {
         try (PrintWriter writer = new PrintWriter(new FileWriter(cheminRapport))) {
-            writer.println("Nom du fichier;Taille (Mo);Statut;Progression (%);Heure de debut;Heure de fin");
+            // Séparateur point-virgule pour Excel
+            writer.println("Nom du fichier;URL;Taille (Mo);Statut;Progression (%);Vitesse (Mo/s);Début;Fin");
             for (TacheTelechargement t : taches) {
-                writer.printf("%s;%.1f;%s;%.1f;%s;%s%n",
+                writer.printf("%s;%s;%.1f;%s;%.1f;%.2f;%s;%s%n",
                         t.getNomFichier(),
+                        t.getUrlSource(),
                         t.getTailleTotaleMo(),
                         t.getStatut().getLibelle(),
                         t.getProgression(),
+                        t.getVitesseMoS(),
                         t.getHeureDebutFormatee(),
                         t.getHeureFinFormatee());
             }
